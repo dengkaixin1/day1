@@ -1,0 +1,218 @@
+1.协同过滤又可分为评比（rating）或者群体过滤（social filtering）协同过滤以其出色的速度和健壮性，在全球互联网领域炙手可热
+2.协同过滤的实现：
+  收集数据
+     将不同的行为分组
+     加权操作
+     减噪
+     归一化
+     
+  找到相似用户和物品
+      用相似度查找
+      相似邻居的计算
+      固定数量的邻居
+      基于相似度的邻居
+      
+  进行推荐
+      基于用户的cf
+      基于物品的cf
+  
+一.基于用户的协同过滤
+1.解决的问题
+  已知用户评分矩阵Matrix R（一般都是非常稀疏）
+  推断矩阵中空格empty cells处的值
+2.UserCF存在的问题issues
+  对于一个新用户，很难找到邻居用户。
+  对于一个物品，所有最近的邻居都在其上没有打多少分
+3.基础解决方案
+  相似度计算最好使用皮尔逊相似度
+  考虑共同打分物品的数目，如乘长min（n，N）/N    n：共同打分数  N：指定阈值
+  对打分进行归一化处理
+  设置一个相似度阈值
+4.基于用户的协同过滤为啥不流行？
+  1.稀疏问题
+  2.数百万的用户计算，这量？
+  3.人是善变的
+  
+二基于物品的协同过滤
+ 1.基于物品的协同过优势！
+   计算性能高，通常用户数量远远大于物品数量
+   可预先计算保留，物品并不善变
+  
+ 两种算法的比较
+    计算复杂度：两个算法在不同的系统中各有优势，推荐引擎的设计者需要根据自己应用的特点选择更加合适的算法
+    适用场景：在现今很流行的社交网络站点中，User CF 是一个更不错的选择，User CF 加上社会网络信息，可以增加用户对推荐解释的信服程度。
+    推荐多样性和精度：互补
+  
+ 基于用户的协同过滤算法
+     寻找偏好相似对的用户
+     欧几里德距离评价
+     皮尔逊相关评价
+     皮尔逊相关系数
+     为相似的用户提供推荐物品
+     
+  基于物品的协同过滤算法
+      寻找相似的物品
+      欧几里德距离评价
+      皮尔逊相关度评价
+      皮尔逊相关计算公式
+      加权排序推荐
+      
+  具体实现
+  import math
+import sys
+from texttable import Texttable
+
+
+#
+#   使用 |A&B|/sqrt(|A || B |)计算余弦距离
+#
+#
+#
+def calcCosDistSpe(user1,user2):
+    avg_x=0.0
+    avg_y=0.0
+    for key in user1:
+        avg_x+=key[1]
+    avg_x=avg_x/len(user1)
+
+    for key in user2:
+        avg_y+=key[1]
+    avg_y=avg_y/len(user2)
+
+    u1_u2=0.0
+    for key1 in user1:
+        for key2 in user2:
+            if key1[1] > avg_x and key2[1]>avg_y and key1[0]==key2[0]:
+                u1_u2+=1
+    u1u2=len(user1)*len(user2)*1.0
+    sx_sy=u1_u2/math.sqrt(u1u2)
+    return sx_sy
+
+
+#
+#   计算余弦距离
+#
+#
+def calcCosDist(user1,user2):
+    sum_x=0.0
+    sum_y=0.0
+    sum_xy=0.0
+    for key1 in user1:
+        for key2 in user2:
+            if key1[0]==key2[0] :
+                sum_xy+=key1[1]*key2[1]
+                sum_y+=key2[1]*key2[1]
+                sum_x+=key1[1]*key1[1]
+
+    if sum_xy == 0.0 :
+        return 0
+    sx_sy=math.sqrt(sum_x*sum_y) 
+    return sum_xy/sx_sy
+
+
+#
+#
+#   相似余弦距离
+#
+#
+#
+def calcSimlaryCosDist(user1,user2):
+    sum_x=0.0
+    sum_y=0.0
+    sum_xy=0.0
+    avg_x=0.0
+    avg_y=0.0
+    for key in user1:
+        avg_x+=key[1]
+    avg_x=avg_x/len(user1)
+
+    for key in user2:
+        avg_y+=key[1]
+    avg_y=avg_y/len(user2)
+
+    for key1 in user1:
+        for key2 in user2:
+            if key1[0]==key2[0] :
+                sum_xy+=(key1[1]-avg_x)*(key2[1]-avg_y)
+                sum_y+=(key2[1]-avg_y)*(key2[1]-avg_y)
+        sum_x+=(key1[1]-avg_x)*(key1[1]-avg_x)
+
+    if sum_xy == 0.0 :
+        return 0
+    sx_sy=math.sqrt(sum_x*sum_y) 
+    return sum_xy/sx_sy
+
+
+#
+#   读取文件
+#
+#
+def readFile(file_name):
+    contents_lines=[]
+    f=open(file_name,"r")
+    contents_lines=f.readlines()
+    f.close()
+    return contents_lines
+
+
+
+#
+#   解压rating信息，格式：用户id\t硬盘id\t用户rating\t时间
+#   输入：数据集合
+#   输出:已经解压的排名信息
+#
+def getRatingInformation(ratings):
+    rates=[]
+    for line in ratings:
+        rate=line.split("\t")
+        rates.append([int(rate[0]),int(rate[1]),int(rate[2])])
+    return rates
+
+
+#
+#   生成用户评分的数据结构
+#   
+#   输入:所以数据 [[2,1,5],[2,4,2]...]
+#   输出:1.用户打分字典 2.电影字典
+#   使用字典，key是用户id，value是用户对电影的评价，
+#   rate_dic[2]=[(1,5),(4,2)].... 表示用户2对电影1的评分是5，对电影4的评分是2
+#
+def createUserRankDic(rates):
+    user_rate_dic={}
+    item_to_user={}
+    for i in rates:
+        user_rank=(i[1],i[2])
+        if i[0] in user_rate_dic:
+            user_rate_dic[i[0]].append(user_rank)
+        else:
+            user_rate_dic[i[0]]=[user_rank]
+
+        if i[1] in item_to_user:
+            item_to_user[i[1]].append(i[0])
+        else:
+            item_to_user[i[1]]=[i[0]]
+
+    return user_rate_dic,item_to_user
+
+
+#
+#   计算与指定用户最相近的邻居
+#   输入:指定用户ID，所以用户数据，所以物品数据
+#   输出:与指定用户最相邻的邻居列表
+#
+def calcNearestNeighbor(userid,users_dic,item_dic):
+    neighbors=[]
+    #neighbors.append(userid)
+    for item in users_dic[userid]:
+        for neighbor in item_dic[item[0]]:
+            if neighbor != userid and neighbor not in neighbors: 
+                neighbors.append(neighbor)
+
+    neighbors_dist=[]
+    for neighbor in neighbors:
+        dist=calcSimlaryCosDist(users_dic[userid],users_dic[neighbor])  #calcSimlaryCosDist  calcCosDist calcCosDistSpe
+        neighbors_dist.append([dist,neighbor])
+    neighbors_dist.sort(reverse=True)
+    #print neighbors_dist
+  
+  
